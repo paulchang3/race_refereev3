@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="zh-Hant"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>百米賽跑裁判台・安裝</title>
+<style>
+:root{--bg:#0b1220;--panel:#111c30;--line:#1f2f46;--ink:#f1f5f9;--mute:#9bb0c7;--cy:#22d3ee;--or:#fb923c}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.6 system-ui,"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif}
+main{max-width:560px;margin:0 auto;padding:28px 18px 56px}
+h1{font-size:30px;line-height:1.2;margin:0 0 6px}
+.sub{color:var(--mute);margin:0 0 24px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px;margin-bottom:16px}
+.detect{color:var(--mute);margin:0 0 12px}
+.detect b{color:var(--ink)}
+.btn{display:block;text-align:center;text-decoration:none;font-weight:800;font-size:18px;padding:15px;border-radius:12px;background:var(--cy);color:#04222b;margin:8px 0}
+.btn.alt{background:transparent;color:var(--cy);border:2px solid var(--cy);font-size:16px;padding:11px}
+.btn[aria-disabled=true]{opacity:.45;pointer-events:none}
+ol{margin:12px 0 0;padding-left:22px}
+li{margin:6px 0}
+.note{color:var(--or);margin:12px 0 0}
+h2{font-size:18px;margin:0 0 10px}
+.pick{display:flex;gap:8px;flex-wrap:wrap}
+.pick button{flex:1 1 0;min-width:90px;font:inherit;font-weight:700;padding:10px;border-radius:10px;border:2px solid var(--line);background:#0b1220;color:var(--ink);cursor:pointer}
+.pick button[aria-pressed=true]{border-color:var(--cy);background:#12324a}
+button:focus-visible,a:focus-visible,input:focus-visible{outline:3px solid #fff;outline-offset:2px}
+input{width:100%;font:inherit;padding:10px;border-radius:10px;border:1px solid var(--line);background:#0b1220;color:var(--ink)}
+.small{color:var(--mute);font-size:14px}
+[hidden]{display:none!important}
+</style></head><body><main>
+<h1>百米賽跑裁判台</h1>
+<p class="sub">Host 裝在這裡下載的 App 上；選手不用安裝，掃 QR 就能參賽。</p>
+
+<section class="panel" id="main">
+  <p class="detect" id="detect"></p>
+  <div id="downloads"></div>
+  <ol id="steps"></ol>
+  <p class="note" id="note"></p>
+</section>
+
+<section class="panel" id="repoBox" hidden>
+  <h2>找不到下載來源</h2>
+  <p class="small">這個頁面不是放在 github.io，請輸入 GitHub 倉庫（例如 <code>myname/race_referee</code>）：</p>
+  <input id="repoInput" placeholder="owner/repo" autocomplete="off">
+  <a class="btn alt" href="#" id="repoOk" role="button">套用</a>
+</section>
+
+<section class="panel">
+  <h2>要裝在別的裝置？自己選</h2>
+  <div class="pick" id="pick">
+    <button data-p="android">Android</button>
+    <button data-p="windows">Windows</button>
+    <button data-p="other">iPhone／Mac／其他</button>
+  </div>
+</section>
+
+<section class="panel">
+  <h2>選手怎麼加入</h2>
+  <p class="small" style="margin:0">手機連同一個 Wi-Fi（或 Host 開的熱點），用相機掃 Host 畫面上的 QR。瀏覽器若顯示「不安全」，選「進階 → 繼續前往」，再按「連線並啟用感測器」。iPhone、Android 都可以。</p>
+</section>
+</main>
+<script>
+(function(){
+  var $=function(id){return document.getElementById(id)};
+  var NAMES={android:"Android 手機／平板",windows:"Windows 電腦",ios:"iPhone／iPad",mac:"Mac",linux:"Linux／ChromeOS"};
+  var PLAT={
+    android:{files:[["下載 Android 安裝檔（APK）","race-referee.apk"]],steps:[
+      "按上面的按鈕下載。Chrome 若說「這類檔案可能有害」，選「仍要下載」。",
+      "點開下載好的檔案。第一次會要求允許「安裝未知應用程式」，開啟後回來按「安裝」。",
+      "開啟 App，手機連上 Wi-Fi 或開啟行動熱點，畫面上就會出現 QR。"],
+      note:"這是自行簽署的版本，Google Play Protect 可能會提醒，選「仍要安裝」。"},
+    windows:{files:[["下載 Windows 安裝程式","race-referee-setup.exe"],["免安裝版（zip，需自行允許防火牆）","race-referee-windows.zip",1]],steps:[
+      "按上面的按鈕下載並執行。",
+      "出現「Windows 已保護您的電腦」時，點「更多資訊」→「仍要執行」。",
+      "安裝程式會自動附上必要的執行庫，並加入防火牆規則，讓手機連得進來；安裝完成後直接啟動。",
+      "電腦與選手手機要在同一個 Wi-Fi，QR 會顯示在畫面上，可直接投影。"],
+      note:""},
+    other:{files:[],steps:[
+      "iPhone／iPad／Mac 目前沒有 Host 版本（需要 Mac 與 Apple 簽章才能打包）。",
+      "請改用 Android 手機或 Windows 電腦當 Host。",
+      "你的 iPhone 仍然可以當選手：掃 Host 的 QR 即可，不用安裝任何東西。"],note:""}
+  };
+  function detect(){
+    var ua=navigator.userAgent||"",d=navigator.userAgentData,p=(d&&d.platform)||"";
+    if(/Android/i.test(ua)||p==="Android")return"android";
+    if(/iPhone|iPad|iPod/.test(ua)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1))return"ios";
+    if(/Windows/i.test(ua)||p==="Windows")return"windows";
+    if(/Macintosh|Mac OS/i.test(ua))return"mac";
+    if(/Linux|CrOS/i.test(ua))return"linux";
+    return null;
+  }
+  function store(k,v){try{if(v===undefined)return localStorage.getItem(k);localStorage.setItem(k,v)}catch(e){}return null}
+  function repo(){
+    var q=new URLSearchParams(location.search).get("repo");
+    if(q&&/^[\w.-]+\/[\w.-]+$/.test(q))return q;
+    var h=location.hostname;
+    if(/\.github\.io$/.test(h)){var seg=location.pathname.split("/")[1];if(seg)return h.split(".")[0]+"/"+seg}
+    var s=store("repo");
+    return(s&&/^[\w.-]+\/[\w.-]+$/.test(s))?s:null;
+  }
+  var detected=detect();
+  var chosen=null;
+  function key(){
+    var k=chosen||detected;
+    return(k==="android"||k==="windows")?k:"other";
+  }
+  function render(){
+    var k=key(),info=PLAT[k],r=repo();
+    $("repoBox").hidden=!!r;
+    if(chosen)$("detect").innerHTML="你選擇的是：<b>"+(k==="other"?"其他裝置":NAMES[k])+"</b>";
+    else if(detected)$("detect").innerHTML="偵測到你的裝置：<b>"+NAMES[detected]+"</b>"+(k==="other"?"（目前沒有這個平台的 Host 版本）":"");
+    else $("detect").innerHTML="<b>偵測不到你的系統</b>，請在下方自己選擇。";
+    var box=$("downloads");box.innerHTML="";
+    info.files.forEach(function(f){
+      var a=document.createElement("a");
+      a.className="btn"+(f[2]?" alt":"");
+      a.textContent=f[0];
+      if(r){a.href="https://github.com/"+r+"/releases/latest/download/"+f[1]}
+      else a.setAttribute("aria-disabled","true");
+      box.appendChild(a);
+    });
+    $("steps").innerHTML="";
+    info.steps.forEach(function(s){var li=document.createElement("li");li.textContent=s;$("steps").appendChild(li)});
+    $("note").textContent=info.note;
+    Array.prototype.forEach.call(document.querySelectorAll("#pick button"),function(b){
+      b.setAttribute("aria-pressed",String(b.getAttribute("data-p")===k));
+    });
+  }
+  Array.prototype.forEach.call(document.querySelectorAll("#pick button"),function(b){
+    b.onclick=function(){chosen=b.getAttribute("data-p");render()};
+  });
+  $("repoOk").onclick=function(e){
+    e.preventDefault();
+    var v=$("repoInput").value.trim().replace(/^https?:\/\/github\.com\//,"").replace(/\/$/,"");
+    if(/^[\w.-]+\/[\w.-]+$/.test(v)){store("repo",v);render()}else $("repoInput").setCustomValidity("格式要像 owner/repo");
+  };
+  render();
+})();
+</script></body></html>

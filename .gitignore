@@ -1,0 +1,11 @@
+android/
+build/
+.dart_tool/
+.flutter-plugins*
+.packages
+pubspec.lock
+test/
+*.iml
+.idea/
+windows/
+out/

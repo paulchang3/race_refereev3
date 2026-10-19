@@ -1,0 +1,130 @@
+name: Build and publish
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write   # 建立 Release
+  pages: write      # 部署安裝頁
+  id-token: write
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      # repo 只放 pubspec.yaml 與 lib/，平台骨架在這裡產生
+      - name: Generate Android scaffold
+        run: |
+          flutter create --platforms=android --org com.example --project-name race_referee .
+          rm -rf test
+
+      # release 版預設沒有網路權限，伺服器會開不起來
+      - name: Add network permissions
+        run: |
+          f=android/app/src/main/AndroidManifest.xml
+          sed -i 's|<application|<uses-permission android:name="android.permission.INTERNET"/>\n    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>\n    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>\n    <application|' "$f"
+          grep -n "uses-permission" "$f"
+
+      - run: flutter pub get
+      - run: flutter build apk --release
+      - run: cp build/app/outputs/flutter-apk/app-release.apk race-referee.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: race-referee.apk
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Generate Windows scaffold
+        shell: pwsh
+        run: |
+          flutter create --platforms=windows --org com.example --project-name race_referee .
+          if (Test-Path test) { Remove-Item test -Recurse -Force }
+
+      - run: flutter pub get
+      - run: flutter build windows --release
+
+      # 把 VC++ 執行庫一起放進去，使用者不用另外裝 Visual C++ Redistributable
+      - name: Bundle VC++ runtime
+        shell: pwsh
+        run: |
+          $rel = "build/windows/x64/runner/Release"
+          foreach ($d in "msvcp140.dll","vcruntime140.dll","vcruntime140_1.dll") {
+            Copy-Item "$env:SystemRoot\System32\$d" $rel -Force
+          }
+
+      - name: Zip portable build
+        shell: pwsh
+        run: Compress-Archive -Path "build/windows/x64/runner/Release/*" -DestinationPath race-referee-windows.zip
+
+      # 安裝程式：複製檔案、建立捷徑、加入防火牆規則（手機才連得進來）
+      - name: Build installer
+        shell: pwsh
+        run: |
+          choco install innosetup -y --no-progress
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" installer\race_referee.iss
+          Copy-Item out\race-referee-setup.exe race-referee-setup.exe
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: |
+            race-referee-setup.exe
+            race-referee-windows.zip
+
+  release:
+    needs: [android, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - run: ls -la dist
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('build-{0}', github.run_number) }}
+          target_commitish: ${{ github.sha }}
+          name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('Build {0}', github.run_number) }}
+          make_latest: true
+          files: dist/*
+
+  pages:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+      - id: deploy
+        uses: actions/deploy-pages@v4
